@@ -22,7 +22,7 @@ body {
 /* ── Hero scroll zone (espaço para rolar) ── */
 
 .hero-scroll {
-  height: 300vh;
+  height: 450vh;
 }
 
 /* ── Hero fixa ── */
@@ -73,6 +73,7 @@ body {
 body.use-video .hero__video {
   z-index: 1;
   opacity: 1;
+  will-change: transform;
 }
 
 body.use-canvas .hero__video {
@@ -81,6 +82,7 @@ body.use-canvas .hero__video {
 
 body.use-canvas .hero__canvas {
   display: block;
+  will-change: transform;
 }
 
 .hero__overlay {
@@ -122,7 +124,7 @@ body.use-canvas .hero__canvas {
 
 @media (max-width: 640px) {
   .hero-scroll {
-    height: 400vh;
+    height: 550vh;
   }
 
   .tagline__text {

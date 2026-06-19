@@ -9,6 +9,7 @@ const isIOS =
   (navigator.userAgent.includes("Mac") && "ontouchend" in document);
 
 const useCanvas = isIOS;
+const isMobile = window.matchMedia("(max-width: 640px)").matches;
 
 video.muted = true;
 video.playsInline = true;
@@ -19,6 +20,8 @@ document.body.classList.add(useCanvas ? "use-canvas" : "use-video");
 let duration = 0;
 let isReady = false;
 let isActivated = !useCanvas;
+let smoothTime = 0;
+let crop = null;
 
 function getViewportHeight() {
   return window.visualViewport?.height ?? window.innerHeight;
@@ -37,21 +40,7 @@ function getTargetTime() {
   return getScrollProgress() * duration;
 }
 
-function resizeCanvas() {
-  if (!useCanvas) return;
-
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const width = hero.clientWidth;
-  const height = hero.clientHeight;
-
-  canvas.width = Math.round(width * dpr);
-  canvas.height = Math.round(height * dpr);
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${height}px`;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-}
-
-function drawCoverFrame() {
+function updateCropCache() {
   if (!useCanvas) return;
 
   const vw = video.videoWidth;
@@ -76,20 +65,57 @@ function drawCoverFrame() {
     sy = (vh - sh) / 2;
   }
 
-  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch);
+  crop = { sx, sy, sw, sh, cw, ch };
+}
+
+function resizeCanvas() {
+  if (!useCanvas) return;
+
+  const dpr = isMobile
+    ? 1
+    : Math.min(window.devicePixelRatio || 1, 1.5);
+  const width = hero.clientWidth;
+  const height = hero.clientHeight;
+
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  updateCropCache();
+}
+
+function drawCoverFrame() {
+  if (!useCanvas || !crop) return;
+  ctx.drawImage(video, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, crop.cw, crop.ch);
+}
+
+function scheduleDraw() {
+  if (!useCanvas) return;
+
+  if ("requestVideoFrameCallback" in video) {
+    video.requestVideoFrameCallback(() => drawCoverFrame());
+  } else {
+    drawCoverFrame();
+  }
 }
 
 function scrubToScroll() {
   if (!isReady || !isActivated) return;
 
   const target = getTargetTime();
+  const gap = Math.abs(target - smoothTime);
+  const factor = gap > 0.4 ? 0.22 : gap > 0.1 ? 0.14 : 0.09;
 
-  if (Math.abs(video.currentTime - target) > 0.001) {
-    video.currentTime = target;
-  }
+  smoothTime += (target - smoothTime) * factor;
 
-  if (useCanvas) {
-    drawCoverFrame();
+  if (Math.abs(video.currentTime - smoothTime) > 0.004) {
+    video.currentTime = smoothTime;
+
+    if (useCanvas) {
+      scheduleDraw();
+    }
   }
 }
 
@@ -120,6 +146,7 @@ async function activateVideo() {
     }
 
     isActivated = true;
+    smoothTime = getTargetTime();
     scrubToScroll();
   } catch {
     isActivated = false;
@@ -131,6 +158,7 @@ function onVideoReady() {
 
   duration = video.duration;
   isReady = video.readyState >= 2;
+  smoothTime = getTargetTime();
 
   if (!useCanvas) {
     video.pause();
@@ -144,10 +172,6 @@ function onVideoReady() {
 video.addEventListener("loadedmetadata", onVideoReady);
 video.addEventListener("loadeddata", onVideoReady);
 video.addEventListener("canplay", onVideoReady);
-
-if (useCanvas) {
-  video.addEventListener("seeked", drawCoverFrame);
-}
 
 document.addEventListener("touchstart", activateVideo, { passive: true });
 document.addEventListener("click", activateVideo);
