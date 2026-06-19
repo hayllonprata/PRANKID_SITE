@@ -10,6 +10,7 @@ const isIOS =
 
 const useCanvas = isIOS;
 const isMobile = window.matchMedia("(max-width: 640px)").matches;
+const supportsReversePlayback = !useCanvas;
 
 video.muted = true;
 video.playsInline = true;
@@ -21,6 +22,7 @@ let duration = 0;
 let isReady = false;
 let isActivated = !useCanvas;
 let smoothTime = 0;
+let lastScrollY = window.scrollY;
 let crop = null;
 
 function getViewportHeight() {
@@ -101,22 +103,77 @@ function scheduleDraw() {
   }
 }
 
-function scrubToScroll() {
-  if (!isReady || !isActivated) return;
-
-  const target = getTargetTime();
-  const gap = Math.abs(target - smoothTime);
+function applyForwardSmoothing(target) {
+  const gap = target - smoothTime;
   const factor = gap > 0.4 ? 0.22 : gap > 0.1 ? 0.14 : 0.09;
-
-  smoothTime += (target - smoothTime) * factor;
+  smoothTime += gap * factor;
 
   if (Math.abs(video.currentTime - smoothTime) > 0.004) {
     video.currentTime = smoothTime;
-
-    if (useCanvas) {
-      scheduleDraw();
-    }
+    if (useCanvas) scheduleDraw();
   }
+}
+
+function applyReverseByScrollDelta(scrollDelta, target) {
+  const rawDelta = (scrollDelta / getMaxScroll()) * duration;
+  const timeDelta = Math.max(rawDelta, -0.045);
+  smoothTime = Math.max(0, smoothTime + timeDelta);
+
+  if (smoothTime < target) smoothTime = target;
+
+  if (Math.abs(video.currentTime - smoothTime) > 0.008) {
+    video.currentTime = smoothTime;
+    drawCoverFrame();
+  }
+}
+
+function applyReverseByPlayback(target) {
+  const diff = target - video.currentTime;
+
+  if (diff < -0.012) {
+    video.playbackRate = Math.max(diff * 6, -3);
+    if (video.paused) video.play();
+    smoothTime = video.currentTime;
+    return;
+  }
+
+  video.pause();
+  video.playbackRate = 1;
+  video.currentTime = target;
+  smoothTime = target;
+}
+
+function scrubToScroll() {
+  if (!isReady || !isActivated) return;
+
+  const scrollY = window.scrollY;
+  const scrollDelta = scrollY - lastScrollY;
+  lastScrollY = scrollY;
+
+  const target = getTargetTime();
+  const reversing = target < smoothTime - 0.001;
+
+  if (reversing) {
+    if (supportsReversePlayback) {
+      applyReverseByPlayback(target);
+    } else if (scrollDelta < 0) {
+      applyReverseByScrollDelta(scrollDelta, target);
+    } else {
+      smoothTime = target;
+      if (Math.abs(video.currentTime - smoothTime) > 0.008) {
+        video.currentTime = smoothTime;
+        drawCoverFrame();
+      }
+    }
+    return;
+  }
+
+  if (!useCanvas && !video.paused) {
+    video.pause();
+    video.playbackRate = 1;
+  }
+
+  applyForwardSmoothing(target);
 }
 
 function updateHeroVisibility() {
@@ -143,10 +200,12 @@ async function activateVideo() {
       video.playbackRate = 0;
     } else {
       video.pause();
+      video.playbackRate = 1;
     }
 
     isActivated = true;
     smoothTime = getTargetTime();
+    lastScrollY = window.scrollY;
     scrubToScroll();
   } catch {
     isActivated = false;
@@ -159,9 +218,11 @@ function onVideoReady() {
   duration = video.duration;
   isReady = video.readyState >= 2;
   smoothTime = getTargetTime();
+  lastScrollY = window.scrollY;
 
   if (!useCanvas) {
     video.pause();
+    video.playbackRate = 1;
     isActivated = true;
   }
 
@@ -185,11 +246,13 @@ window.addEventListener(
 );
 
 window.addEventListener("resize", () => {
+  lastScrollY = window.scrollY;
   resizeCanvas();
   scrubToScroll();
 }, { passive: true });
 
 window.visualViewport?.addEventListener("resize", () => {
+  lastScrollY = window.scrollY;
   resizeCanvas();
   scrubToScroll();
 }, { passive: true });
