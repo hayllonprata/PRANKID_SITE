@@ -4,19 +4,21 @@ const video = document.querySelector(".hero__video");
 const canvas = document.querySelector(".hero__canvas");
 const ctx = canvas.getContext("2d", { alpha: false });
 
+const isIOS =
+  /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.userAgent.includes("Mac") && "ontouchend" in document);
+
+const useCanvas = isIOS;
+
 video.muted = true;
 video.playsInline = true;
 video.setAttribute("playsinline", "");
 video.setAttribute("webkit-playsinline", "");
+document.body.classList.add(useCanvas ? "use-canvas" : "use-video");
 
 let duration = 0;
 let isReady = false;
-let isActivated = false;
-let isSeeking = false;
-let targetTime = 0;
-let lastDrawnTime = -1;
-let ticking = false;
-let seekFallbackTimer = null;
+let isActivated = !useCanvas;
 
 function getViewportHeight() {
   return window.visualViewport?.height ?? window.innerHeight;
@@ -30,7 +32,14 @@ function getScrollProgress() {
   return Math.min(Math.max(window.scrollY / getMaxScroll(), 0), 1);
 }
 
+function getTargetTime() {
+  if (!duration) return 0;
+  return getScrollProgress() * duration;
+}
+
 function resizeCanvas() {
+  if (!useCanvas) return;
+
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const width = hero.clientWidth;
   const height = hero.clientHeight;
@@ -40,13 +49,11 @@ function resizeCanvas() {
   canvas.style.width = `${width}px`;
   canvas.style.height = `${height}px`;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-  if (isReady) {
-    drawCoverFrame();
-  }
 }
 
 function drawCoverFrame() {
+  if (!useCanvas) return;
+
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   if (!vw || !vh) return;
@@ -70,50 +77,19 @@ function drawCoverFrame() {
   }
 
   ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch);
-  lastDrawnTime = video.currentTime;
 }
 
-function queueSeek(time) {
-  if (!isReady || !duration) return;
+function scrubToScroll() {
+  if (!isReady || !isActivated) return;
 
-  targetTime = Math.min(Math.max(time, 0), duration - 0.04);
+  const target = getTargetTime();
 
-  if (Math.abs(lastDrawnTime - targetTime) < 0.03) return;
-  if (isSeeking) return;
-
-  if (Math.abs(video.currentTime - targetTime) < 0.03) {
-    drawCoverFrame();
-    return;
+  if (Math.abs(video.currentTime - target) > 0.001) {
+    video.currentTime = target;
   }
 
-  isSeeking = true;
-  clearTimeout(seekFallbackTimer);
-
-  seekFallbackTimer = setTimeout(() => {
-    isSeeking = false;
+  if (useCanvas) {
     drawCoverFrame();
-    if (Math.abs(lastDrawnTime - targetTime) > 0.05) {
-      queueSeek(targetTime);
-    }
-  }, 150);
-
-  if (typeof video.fastSeek === "function") {
-    video.fastSeek(targetTime);
-  } else {
-    video.currentTime = targetTime;
-  }
-}
-
-function updateFrame() {
-  updateHeroVisibility();
-  queueSeek(getScrollProgress() * duration);
-  ticking = false;
-}
-
-function onScroll() {
-  if (!ticking) {
-    ticking = true;
-    requestAnimationFrame(updateFrame);
   }
 }
 
@@ -125,14 +101,26 @@ function updateHeroVisibility() {
   }
 }
 
+function tick() {
+  scrubToScroll();
+  updateHeroVisibility();
+  requestAnimationFrame(tick);
+}
+
 async function activateVideo() {
   if (isActivated) return;
 
   try {
     await video.play();
-    video.pause();
+
+    if (useCanvas) {
+      video.playbackRate = 0;
+    } else {
+      video.pause();
+    }
+
     isActivated = true;
-    queueSeek(getScrollProgress() * duration);
+    scrubToScroll();
   } catch {
     isActivated = false;
   }
@@ -143,42 +131,45 @@ function onVideoReady() {
 
   duration = video.duration;
   isReady = video.readyState >= 2;
-  video.pause();
+
+  if (!useCanvas) {
+    video.pause();
+    isActivated = true;
+  }
+
   resizeCanvas();
-  queueSeek(0);
+  scrubToScroll();
 }
 
 video.addEventListener("loadedmetadata", onVideoReady);
 video.addEventListener("loadeddata", onVideoReady);
 video.addEventListener("canplay", onVideoReady);
 
-video.addEventListener("seeked", () => {
-  clearTimeout(seekFallbackTimer);
-  isSeeking = false;
-  drawCoverFrame();
-
-  if (Math.abs(video.currentTime - targetTime) > 0.05) {
-    queueSeek(targetTime);
-  }
-});
+if (useCanvas) {
+  video.addEventListener("seeked", drawCoverFrame);
+}
 
 document.addEventListener("touchstart", activateVideo, { passive: true });
-document.addEventListener("touchmove", activateVideo, { passive: true });
 document.addEventListener("click", activateVideo);
 
-window.addEventListener("scroll", onScroll, { passive: true });
-window.addEventListener("touchmove", onScroll, { passive: true });
+window.addEventListener(
+  "scroll",
+  () => {
+    if (useCanvas && !isActivated) activateVideo();
+  },
+  { passive: true }
+);
+
 window.addEventListener("resize", () => {
   resizeCanvas();
-  onScroll();
+  scrubToScroll();
 }, { passive: true });
 
-window.visualViewport?.addEventListener("scroll", onScroll, { passive: true });
 window.visualViewport?.addEventListener("resize", () => {
   resizeCanvas();
-  onScroll();
+  scrubToScroll();
 }, { passive: true });
 
 video.load();
 resizeCanvas();
-onScroll();
+requestAnimationFrame(tick);
