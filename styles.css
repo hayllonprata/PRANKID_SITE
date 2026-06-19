@@ -16,55 +16,65 @@ body {
   background: #0a0a0a;
   color: #fff;
   font-family: "Inter", sans-serif;
+  touch-action: pan-y;
 }
 
-html,
-body {
-  overflow-x: clip;
-}
-
-main {
-  display: flex;
-  flex-direction: column;
-}
-
-/* ── Hero scroll zone ── */
+/* ── Hero scroll zone (espaço para rolar) ── */
 
 .hero-scroll {
-  position: relative;
   height: 300vh;
 }
 
-/* ── Hero ── */
+/* ── Hero fixa ── */
 
 .hero {
-  position: sticky;
-  top: 0;
+  position: fixed;
+  inset: 0 auto auto 0;
   width: 100%;
   height: 100vh;
   height: 100dvh;
-  min-height: 500px;
-  overflow: hidden;
-  -webkit-transform: translateZ(0);
-  transform: translateZ(0);
+  z-index: 1;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
 }
 
-.hero__video-wrapper {
-  position: absolute;
-  inset: 0;
+.hero.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.hero__media {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #111;
 }
 
 .hero__video {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hero__canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   display: block;
-  background: #111;
+  width: 100%;
+  height: 100%;
 }
 
 .hero__overlay {
   position: absolute;
   inset: 0;
+  z-index: 2;
   background: linear-gradient(
     to bottom,
     transparent 60%,
@@ -77,6 +87,8 @@ main {
 /* ── Tagline ── */
 
 .tagline {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -98,7 +110,7 @@ main {
 
 @media (max-width: 640px) {
   .hero-scroll {
-    height: 350vh;
+    height: 400vh;
   }
 
   .tagline__text {

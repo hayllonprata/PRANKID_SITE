@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Prankid World</title>
   <link rel="icon" href="favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="favicon.png">
@@ -13,23 +13,24 @@
 </head>
 <body>
   <main>
-    <div class="hero-scroll">
-      <section class="hero">
-        <div class="hero__video-wrapper">
-          <video
-            class="hero__video"
-            muted
-            playsinline
-            webkit-playsinline
-            disablePictureInPicture
-            preload="auto"
-          >
-            <source src="pran.mp4" type="video/mp4">
-          </video>
-          <div class="hero__overlay"></div>
-        </div>
-      </section>
-    </div>
+    <div class="hero-scroll"></div>
+
+    <section class="hero">
+      <div class="hero__media">
+        <video
+          class="hero__video"
+          muted
+          playsinline
+          webkit-playsinline
+          disablePictureInPicture
+          preload="auto"
+        >
+          <source src="pran.mp4" type="video/mp4">
+        </video>
+        <canvas class="hero__canvas"></canvas>
+        <div class="hero__overlay"></div>
+      </div>
+    </section>
 
     <section class="tagline">
       <h1 class="tagline__text">FREEDOM AND SUCCESS</h1>
